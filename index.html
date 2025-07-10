@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Prom Voting</title>
+  <meta charset="UTF-8">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body { font-family: sans-serif; text-align: center; padding: 20px; }
+    h2 { margin-top: 40px; }
+    .section { margin: 20px auto; width: 80%; max-width: 600px; }
+    .candidate { margin: 5px 0; }
+    button { padding: 10px 20px; font-size: 18px; margin-top: 20px; }
+    #results { max-width: 700px; margin: 50px auto; }
+    .hidden { display: none; }
+  </style>
+</head>
+<body>
+  <h1>Vote for Your Prom King & Queen</h1>
+  <p id="notice"></p>
+
+  <div id="votingSection" class="section">
+    <form id="voteForm">
+      <h2>Prom King</h2>
+      <div id="kingOptions"></div>
+
+      <h2>Prom Queen</h2>
+      <div id="queenOptions"></div>
+
+      <button type="submit">Submit Vote</button>
+    </form>
+  </div>
+
+  <div id="results" class="hidden">
+    <h2>Voting Results</h2>
+    <canvas id="resultsChart"></canvas>
+  </div>
+
+  <!-- Firebase SDKs -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js"></script>
+
+  <script>
+    // ✅ Your Firebase config
+    const firebaseConfig = {
+      apiKey: "AIzaSyBB_QK8vGyC8NFdTAEfRMl7zqsOge-nYk0",
+      authDomain: "promvoting-f0807.firebaseapp.com",
+      projectId: "promvoting-f0807",
+      storageBucket: "promvoting-f0807.firebasestorage.app",
+      messagingSenderId: "430323373793",
+      appId: "1:430323373793:web:2807a9550165de934309a0"
+    };
+
+    // Init Firebase
+    const app = firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
+
+    const deadline = new Date("2025-08-06T23:59:59");
+    const hasVoted = localStorage.getItem("hasVoted");
+
+    const kingCandidates = Array.from({length: 10}, (_, i) => `King Candidate ${i+1}`);
+    const queenCandidates = Array.from({length: 10}, (_, i) => `Queen Candidate ${i+1}`);
+
+    const kingEl = document.getElementById("kingOptions");
+    const queenEl = document.getElementById("queenOptions");
+    const votingSection = document.getElementById("votingSection");
+    const resultsSection = document.getElementById("results");
+    const notice = document.getElementById("notice");
+
+    function populateCandidates() {
+      kingCandidates.forEach(name => {
+        kingEl.innerHTML += `
+          <div class="candidate">
+            <input type="radio" name="king" value="${name}" required> ${name}
+          </div>`;
+      });
+      queenCandidates.forEach(name => {
+        queenEl.innerHTML += `
+          <div class="candidate">
+            <input type="radio" name="queen" value="${name}" required> ${name}
+          </div>`;
+      });
+    }
+
+    async function recordVote(king, queen) {
+      await db.collection("votes").doc("king").update({
+        [king]: firebase.firestore.FieldValue.increment(1)
+      }).catch(async () => {
+        await db.collection("votes").doc("king").set({ [king]: 1 }, { merge: true });
+      });
+
+      await db.collection("votes").doc("queen").update({
+        [queen]: firebase.firestore.FieldValue.increment(1)
+      }).catch(async () => {
+        await db.collection("votes").doc("queen").set({ [queen]: 1 }, { merge: true });
+      });
+    }
+
+    async function fetchVotes() {
+      const kingDoc = await db.collection("votes").doc("king").get();
+      const queenDoc = await db.collection("votes").doc("queen").get();
+      return {
+        king: kingDoc.exists ? kingDoc.data() : {},
+        queen: queenDoc.exists ? queenDoc.data() : {}
+      };
+    }
+
+    function showResults(votes) {
+      votingSection.classList.add("hidden");
+      resultsSection.classList.remove("hidden");
+
+      const allCandidates = { ...votes.king, ...votes.queen };
+      const labels = Object.keys(allCandidates);
+      const data = Object.values(allCandidates);
+      const bgColors = labels.map(() => `hsl(${Math.random()*360}, 70%, 60%)`);
+
+      new Chart(document.getElementById("resultsChart"), {
+        type: "bar",
+        data: {
+          labels: labels,
+          datasets: [{
+            label: '% of Votes',
+            data: data,
+            backgroundColor: bgColors
+          }]
+        },
+        options: {
+          responsive: true,
+          scales: {
+            y: {
+              beginAtZero: true,
+              ticks: { precision: 0 }
+            }
+          }
+        }
+      });
+    }
+
+    document.getElementById("voteForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const king = document.querySelector('input[name="king"]:checked').value;
+      const queen = document.querySelector('input[name="queen"]:checked').value;
+
+      await recordVote(king, queen);
+      localStorage.setItem("hasVoted", "true");
+      alert("Thank you for voting!");
+      location.reload();
+    });
+
+    async function init() {
+      const now = new Date();
+      if (now > deadline) {
+        notice.innerText = "Voting is closed. Here are the results:";
+        const votes = await fetchVotes();
+        showResults(votes);
+      } else if (hasVoted) {
+        notice.innerText = "You have already voted. Thank you!";
+        const votes = await fetchVotes();
+        showResults(votes);
+      } else {
+        populateCandidates();
+      }
+    }
+
+    init();
+  </script>
+</body>
+</html>
